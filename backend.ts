@@ -2,7 +2,7 @@ import { Elysia, t } from "elysia";
 import { openapi } from "@elysiajs/openapi";
 import { staticPlugin } from "@elysiajs/static";
 import { existsSync } from "node:fs";
-import fs from "node:fs";
+import * as fs from "node:fs";
 import toTaipeiDateTime from "./util.ts";
 import type { Order, OrderResponse } from "./shared/contracts.ts";
 import { createStore } from "./store/index.ts";
