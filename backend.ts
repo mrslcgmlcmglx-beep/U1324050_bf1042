@@ -2,7 +2,6 @@ import { Elysia, t } from "elysia";
 import { openapi } from "@elysiajs/openapi";
 import { staticPlugin } from "@elysiajs/static";
 import { existsSync } from "node:fs";
-const fs = require('node:fs');
 import toTaipeiDateTime from "./util.ts";
 import type { Order, OrderResponse } from "./shared/contracts.ts";
 import { createStore } from "./store/index.ts";
@@ -22,7 +21,7 @@ const allowedOrigin = process.env.API_ALLOWED_ORIGIN || "*";
 const store = createStore({ dataFilePath: "./data/store.json" });
 const auth = createAuth({ dataFilePath: "./data/store.json" });
 const hasPublicAssets =
-  fs.existsSync("./public") && fs.existsSync("./public/index.html");
+  existsSync("./public") && existsSync("./public/index.html");
 
 const apiErrorResponseSchema = t.Object({
   error: t.String(),
