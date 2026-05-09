@@ -12,7 +12,7 @@
     "dev:v8": "bun --watch backend.v8.ts",
     "dev:frontend": "cd frontend && bun run dev",
     "build:frontend": "cd frontend && bun run build",
-    "build:backend": "bun build ./backend.ts --outdir ./dist",
+    "build:backend": "bun build ./backend.ts --outdir ./dist --target bun",
     "build": "bun run build:frontend && bun run build:backend",
     "start": "bun dist/backend.js",
     "preview:frontend": "cd frontend && bun run preview",
