@@ -3,65 +3,60 @@ import { z } from "zod";
 import { openapi } from "@elysiajs/openapi";
 import { staticPlugin } from "@elysiajs/static";
 import { existsSync } from "node:fs";
+import { networkInterfaces } from "node:os";
 import toTaipeiDateTime from "./util.ts";
-import type { Order, OrderResponse } from "./shared/contracts.ts";
 import {
-  menuItemSchema,
-  sessionUserSchema,
-  orderItemSchema,
-  orderResponseSchema,
   apiErrorResponseSchema,
-} from "./shared/contracts.ts";
+  createMenuItemBodySchema,
+  createOrderBodySchema,
+  deleteMenuItemParamsSchema,
+  getOrderByIdParamsSchema,
+  getOrderByIdQuerySchema,
+  getOrderCurrentQuerySchema,
+  getOrderHistoryQuerySchema,
+  healthResponseSchema,
+  loginBodySchema,
+  loginResponseSchema,
+  menuItemResponseSchema,
+  menuListResponseSchema,
+  nullableOrderResponseEnvelopeSchema,
+  orderListResponseSchema,
+  orderResponseEnvelopeSchema,
+  submitOrderBodySchema,
+  submitOrderParamsSchema,
+  toOrderResponse,
+  updateMenuItemBodySchema,
+  updateMenuItemParamsSchema,
+  updateOrderBodySchema,
+  updateOrderParamsSchema,
+} from "./shared/route-schemas.ts";
 import { createStore } from "./store/index.ts";
 import { createAuth } from "./auth/index.ts";
 
-function toOrderResponse(order: Order): OrderResponse {
-  return {
-    ...order,
-    createdAtTaipei: toTaipeiDateTime(order.createdAt),
-  };
-}
-
 // 從環境變量獲取配置
 const port = parseInt(process.env.PORT || "3000", 10);
-const host = process.env.HOST || "localhost";
+const host = process.env.HOST || "0.0.0.0"; // 改為 0.0.0.0 以支持網路訪問
 const allowedOrigin = process.env.API_ALLOWED_ORIGIN || "*";
+
+// 獲取本機 IP 地址
+function getLocalIP(): string {
+  const interfaces = networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    const iface = interfaces[name];
+    if (iface) {
+      for (const addr of iface) {
+        if (addr.family === "IPv4" && !addr.internal) {
+          return addr.address;
+        }
+      }
+    }
+  }
+  return "localhost";
+}
 const store = createStore({ dataFilePath: "./data/store.json" });
 const auth = createAuth({ dataFilePath: "./data/store.json" });
 const hasPublicAssets =
   existsSync("./public") && existsSync("./public/index.html");
-
-// ─── Response Envelope Schemas（從 shared/contracts.ts 的業務 schema 組合）──
-// 業務核心型別（menuItemSchema, sessionUserSchema, orderResponseSchema 等）
-// 定義在 shared/contracts.ts，這裡只組合成各 API 需要的 envelope 結構。
-
-const loginResponseSchema = z.object({
-  data: sessionUserSchema,
-});
-
-const menuListResponseSchema = z.object({
-  data: z.array(menuItemSchema),
-});
-
-const menuItemResponseSchema = z.object({
-  data: menuItemSchema,
-});
-
-const orderListResponseSchema = z.object({
-  data: z.array(orderResponseSchema),
-});
-
-const orderResponseEnvelopeSchema = z.object({
-  data: orderResponseSchema,
-});
-
-const nullableOrderResponseEnvelopeSchema = z.object({
-  data: orderResponseSchema.nullable(),
-});
-
-const healthResponseSchema = z.object({
-  status: z.string(),
-});
 
 const app = new Elysia();
 
@@ -154,10 +149,7 @@ app.post(
     return { data: result.user };
   },
   {
-    body: z.object({
-      email: z.string().min(3),
-      password: z.string().min(1),
-    }),
+    body: loginBodySchema,
     detail: {
       tags: ["auth"],
       summary: "Login with demo credentials",
@@ -191,13 +183,7 @@ app.post(
     return { data: newMenuItem };
   },
   {
-    body: z.object({
-      name: z.string().min(1),
-      price: z.number().int().min(0),
-      category: z.string().min(1),
-      description: z.string().min(1),
-      image_url: z.string().min(1),
-    }),
+    body: createMenuItemBodySchema,
     detail: {
       tags: ["menu"],
       summary: "Create a menu item",
@@ -223,16 +209,8 @@ app.patch(
     return { data: menuItem };
   },
   {
-    params: z.object({
-      id: z.string().regex(/^[0-9]+$/),
-    }),
-    body: z.object({
-      name: z.string().min(1).optional(),
-      price: z.number().int().min(0).optional(),
-      category: z.string().min(1).optional(),
-      description: z.string().min(1).optional(),
-      image_url: z.string().min(1).optional(),
-    }),
+    params: updateMenuItemParamsSchema,
+    body: updateMenuItemBodySchema,
     detail: {
       tags: ["menu"],
       summary: "Update a menu item",
@@ -259,9 +237,7 @@ app.delete(
     return { data: removedMenuItem };
   },
   {
-    params: z.object({
-      id: z.string().regex(/^[0-9]+$/),
-    }),
+    params: deleteMenuItemParamsSchema,
     detail: {
       tags: ["menu"],
       summary: "Delete a menu item",
@@ -307,9 +283,7 @@ app.get(
     return { data: currentOrder ? toOrderResponse(currentOrder) : null };
   },
   {
-    query: z.object({
-      userId: z.string().min(1),
-    }),
+    query: getOrderCurrentQuerySchema,
     detail: {
       tags: ["orders"],
       summary: "Get current order",
@@ -339,9 +313,7 @@ app.get(
     };
   },
   {
-    query: z.object({
-      userId: z.string().min(1),
-    }),
+    query: getOrderHistoryQuerySchema,
     detail: {
       tags: ["orders"],
       summary: "Get order history",
@@ -374,9 +346,7 @@ app.post(
     return { data: toOrderResponse(newOrder) };
   },
   {
-    body: z.object({
-      userId: z.string().min(1),
-    }),
+    body: createOrderBodySchema,
     detail: {
       tags: ["orders"],
       summary: "Create or reuse current order",
@@ -411,12 +381,8 @@ app.get(
     return { data: toOrderResponse(order) };
   },
   {
-    params: z.object({
-      id: z.string().regex(/^[0-9]+$/),
-    }),
-    query: z.object({
-      userId: z.string().min(1),
-    }),
+    params: getOrderByIdParamsSchema,
+    query: getOrderByIdQuerySchema,
     detail: {
       tags: ["orders"],
       summary: "Get order by id",
@@ -470,14 +436,8 @@ app.patch(
     return { data: toOrderResponse(result.order) };
   },
   {
-    params: z.object({
-      id: z.string().regex(/^[0-9]+$/),
-    }),
-    body: z.object({
-      userId: z.string().min(1),
-      itemId: z.number().int().min(1),
-      qty: z.number().min(0),
-    }),
+    params: updateOrderParamsSchema,
+    body: updateOrderBodySchema,
     detail: {
       tags: ["orders"],
       summary: "Update order item quantity",
@@ -528,12 +488,8 @@ app.post(
     return { data: toOrderResponse(result.order) };
   },
   {
-    params: z.object({
-      id: z.string().regex(/^[0-9]+$/),
-    }),
-    body: z.object({
-      userId: z.string().min(1),
-    }),
+    params: submitOrderParamsSchema,
+    body: submitOrderBodySchema,
     detail: {
       tags: ["orders"],
       summary: "Submit order",
@@ -603,15 +559,12 @@ await store.init();
 await auth.init();
 
 app.listen(port, () => {
-  console.log(`🍳 早餐店 API 運行在 http://${host}:${port}`);
-  console.log(`🌐 Web App: http://${host}:${port}`);
-  console.log(`📋 菜單 API: http://${host}:${port}/api/menu`);
-  console.log(`📦 訂單 API: http://${host}:${port}/api/orders`);
-  console.log(`💚 健康檢查: http://${host}:${port}/health`);
-  console.log(`🔐 CORS Origin: ${allowedOrigin}`);
-  if (!hasPublicAssets) {
-    console.log(
-      "⚠️ public/ 不存在，目前只提供 API。若要提供前端頁面，先執行 bun run build:frontend",
-    );
-  }
+  const localIP = getLocalIP();
+
+  console.log(`🍳 早餐店 API 運行中...`);
+  console.log(`   Local:   http://localhost:${port}`);
+  console.log(`   Network: http://${localIP}:${port}`);
+  console.log(`📋 菜單 API: /api/menu`);
+  console.log(`📦 訂單 API: /api/orders`);
+  console.log(`💚 健康檢查: /health`);
 });
