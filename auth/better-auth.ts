@@ -44,6 +44,15 @@ export const auth = betterAuth({
     provider: "pg",
     schema,
   }),
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        defaultValue: "customer",
+        input: false,
+      },
+    },
+  },
   emailAndPassword: {
     enabled: false, // ✅ 禁用 email/password 登入
   },
@@ -74,6 +83,6 @@ export async function getCurrentUser(
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
-    role: (session.user as any).role ?? "customer",
+    role: session.user.role ?? "customer",
   };
 }
