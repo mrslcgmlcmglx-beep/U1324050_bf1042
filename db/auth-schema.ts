@@ -30,6 +30,7 @@ export const user = appSchema.table("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").notNull().default(false),
   image: text("image"),
+  role: text("role").notNull().default("customer"), // V10: 新增角色欄位，預設 customer
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });

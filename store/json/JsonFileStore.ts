@@ -191,6 +191,48 @@ export class JsonFileStore implements Store {
     return this.menu;
   }
 
+  getMenuById(id: number): MenuItem | undefined {
+    return this.menu.find((item) => item.id === id);
+  }
+
+  getMenuCategories(): ReadonlyArray<string> {
+    const categories = new Set(this.menu.map((item) => item.category));
+    return Array.from(categories).sort();
+  }
+
+  getMenuPaginated(options: {
+    search?: string;
+    category?: string;
+    page: number;
+    pageSize: number;
+  }): { items: MenuItem[]; total: number } {
+    let filtered = this.menu;
+
+    // 搜尋過濾
+    if (options.search) {
+      const searchLower = options.search.toLowerCase();
+      filtered = filtered.filter((item) =>
+        item.name.toLowerCase().includes(searchLower) ||
+        item.description.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // 分類過濾
+    if (options.category) {
+      filtered = filtered.filter((item) => item.category === options.category);
+    }
+
+    // 計算總數
+    const total = filtered.length;
+
+    // 分頁
+    const startIdx = (options.page - 1) * options.pageSize;
+    const endIdx = startIdx + options.pageSize;
+    const items = filtered.slice(startIdx, endIdx);
+
+    return { items, total };
+  }
+
   async createMenuItem(input: {
     name: string;
     price: number;
@@ -253,6 +295,35 @@ export class JsonFileStore implements Store {
 
   getOrders(): ReadonlyArray<Order> {
     return this.orders;
+  }
+
+  getOrdersPaginated(options: {
+    status?: "pending" | "submitted";
+    userId?: string;
+    page: number;
+    pageSize: number;
+  }): { orders: Order[]; total: number } {
+    let filtered = this.orders;
+
+    // 狀態過濾
+    if (options.status) {
+      filtered = filtered.filter((o) => o.status === options.status);
+    }
+
+    // 使用者過濾
+    if (options.userId) {
+      filtered = filtered.filter((o) => o.userId === options.userId);
+    }
+
+    // 計算總數
+    const total = filtered.length;
+
+    // 分頁
+    const startIdx = (options.page - 1) * options.pageSize;
+    const endIdx = startIdx + options.pageSize;
+    const orders = filtered.slice(startIdx, endIdx);
+
+    return { orders, total };
   }
 
   getCurrentOrderByUserId(userId: string): Order | undefined {

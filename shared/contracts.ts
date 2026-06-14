@@ -17,7 +17,16 @@ export const sessionUserSchema = z.object({
   id: z.string().min(1),
   email: z.string().min(3),
   name: z.string().min(1),
+  role: z.string().default("customer"),
   // 注意：password 不在 API 業務層，只存在 DB 層（db/schema.ts）
+});
+
+export const userProfileSchema = z.object({
+  id: z.string().min(1),
+  email: z.string().email(),
+  name: z.string().min(1),
+  avatar: z.string().url().optional(),
+  role: z.string().default("customer"),
 });
 
 export const orderItemSchema = z.object({

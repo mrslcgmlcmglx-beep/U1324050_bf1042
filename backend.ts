@@ -4,13 +4,24 @@ import { cors } from "@elysia/cors";
 import { existsSync } from "node:fs";
 import toTaipeiDateTime from "./util.ts";
 import {
+  adminOrdersListResponseSchema,
+  adminOrdersQuerySchema,
+  adminStatsResponseSchema,
+  adminUpdateOrderStatusBodySchema,
+  adminUpdateOrderStatusParamsSchema,
+  adminUsersListResponseSchema,
   apiErrorResponseSchema,
   createMenuItemBodySchema,
   deleteMenuItemParamsSchema,
+  getMenuByIdParamsSchema,
   getOrderByIdParamsSchema,
+  getCurrentUserResponseSchema,
   healthResponseSchema,
+  menuCategoriesResponseSchema,
   menuItemResponseSchema,
+  menuListPaginatedResponseSchema,
   menuListResponseSchema,
+  menuQuerySchema,
   nullableOrderResponseEnvelopeSchema,
   orderListResponseSchema,
   orderResponseEnvelopeSchema,
@@ -20,6 +31,7 @@ import {
   updateMenuItemParamsSchema,
   updateOrderBodySchema,
   updateOrderParamsSchema,
+  updateUserProfileBodySchema,
 } from "./shared/route-schemas.ts";
 import { createStore } from "./store/index.ts";
 import { auth, getCurrentUser } from "./auth/better-auth.ts";
@@ -27,7 +39,8 @@ import { auth, getCurrentUser } from "./auth/better-auth.ts";
 // 從環境變量獲取配置
 const port = parseInt(process.env.PORT || "3000", 10);
 const host = process.env.HOST || "localhost";
-const allowedOrigin = process.env.API_ALLOWED_ORIGIN || "*";
+// 開發環境預設允許 localhost:5173 (Vite dev server)，生產環境必須明確設置
+const allowedOrigin = process.env.API_ALLOWED_ORIGIN || "http://localhost:5173";
 const store = createStore({ dataFilePath: "./data/store.json" });
 const hasPublicAssets =
   existsSync("./public") && existsSync("./public/index.html");
@@ -39,6 +52,19 @@ async function requireUser(request: Request) {
   if (!user) {
     throw new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return user;
+}
+
+// ─── Auth Helper: Require Admin ───────────────────────────────────────────────
+// 要求使用者是管理員，否則拋出 403 Forbidden
+async function requireAdmin(request: Request) {
+  const user = await requireUser(request);
+  if (user.role !== "admin") {
+    throw new Response(JSON.stringify({ error: "Forbidden" }), {
+      status: 403,
       headers: { "Content-Type": "application/json" },
     });
   }
@@ -136,21 +162,127 @@ app.post("/api/sign-out", async ({ request }) => {
   return res;
 });
 
+// ─── Auth 路由：GET /api/auth/me ─────────────────────────────────────────────
+app.get(
+  "/api/auth/me",
+  async ({ request }) => {
+    const user = await getCurrentUser(request);
+    return { data: user };
+  },
+  {
+    detail: {
+      tags: ["auth"],
+      summary: "Get current user",
+      description: "Return the currently logged-in user, or null if not authenticated.",
+    },
+    response: {
+      200: getCurrentUserResponseSchema,
+    },
+  },
+);
+
+// ─── User 路由：PATCH /api/users/me ──────────────────────────────────────────
+app.patch(
+  "/api/users/me",
+  async ({ request, body, set }) => {
+    const user = await requireUser(request);
+    // 目前暫不實裝用戶更新邏輯，直接回傳當前用戶
+    // 後續可以連接資料庫更新 name / avatar 等欄位
+    return { data: user };
+  },
+  {
+    body: updateUserProfileBodySchema,
+    detail: {
+      tags: ["auth"],
+      summary: "Update user profile",
+      description: "Update the current user's profile information.",
+    },
+    response: {
+      200: getCurrentUserResponseSchema,
+      401: apiErrorResponseSchema,
+    },
+  },
+);
+
 // 菜單路由
-app.get("/api/menu", () => ({ data: [...store.getMenu()] }), {
-  detail: {
-    tags: ["menu"],
-    summary: "List menu items",
-    description: "Return all available breakfast menu items.",
+app.get(
+  "/api/menu",
+  ({ query }) => {
+    const validated = menuQuerySchema.parse(query);
+    const page = Math.max(1, parseInt(validated.page || "1", 10));
+    const pageSize = Math.max(1, Math.min(100, parseInt(validated.pageSize || "20", 10)));
+    
+    const { items, total } = store.getMenuPaginated({
+      search: validated.search,
+      category: validated.category,
+      page,
+      pageSize,
+    });
+    return {
+      data: items,
+      meta: {
+        page,
+        pageSize,
+        total,
+      },
+    };
   },
-  response: {
-    200: menuListResponseSchema,
+  {
+    query: menuQuerySchema,
+    detail: {
+      tags: ["menu"],
+      summary: "List menu items with search, filter, and pagination",
+      description:
+        "Return paginated menu items, optionally filtered by category or search term.",
+    },
+    response: {
+      200: menuListPaginatedResponseSchema,
+    },
   },
-});
+);
+
+app.get(
+  "/api/menu/categories",
+  () => ({ data: [...store.getMenuCategories()] }),
+  {
+    detail: {
+      tags: ["menu"],
+      summary: "List menu categories",
+      description: "Return all available menu categories.",
+    },
+    response: {
+      200: menuCategoriesResponseSchema,
+    },
+  },
+);
+
+app.get(
+  "/api/menu/:id",
+  ({ params }) => {
+    const menuItem = store.getMenuById(parseInt(params.id));
+    if (!menuItem) {
+      return { error: "Menu item not found" };
+    }
+    return { data: menuItem };
+  },
+  {
+    params: getMenuByIdParamsSchema,
+    detail: {
+      tags: ["menu"],
+      summary: "Get menu item by ID",
+      description: "Return a specific menu item by its ID.",
+    },
+    response: {
+      200: menuItemResponseSchema,
+      404: apiErrorResponseSchema,
+    },
+  },
+);
 
 app.post(
-  "/api/menu",
-  async ({ body, set }) => {
+  "/api/admin/menu",
+  async ({ request, body, set }) => {
+    await requireAdmin(request);
     const newMenuItem = await store.createMenuItem(body);
     set.status = 201;
     return { data: newMenuItem };
@@ -158,19 +290,22 @@ app.post(
   {
     body: createMenuItemBodySchema,
     detail: {
-      tags: ["menu"],
-      summary: "Create a menu item",
+      tags: ["admin"],
+      summary: "Create a menu item (admin only)",
       description: "Add a new menu item into the breakfast menu.",
     },
     response: {
       201: menuItemResponseSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
     },
   },
 );
 
 app.patch(
-  "/api/menu/:id",
-  async ({ params, body, set }) => {
+  "/api/admin/menu/:id",
+  async ({ request, params, body, set }) => {
+    await requireAdmin(request);
     const menuId = parseInt(params.id);
     const menuItem = await store.updateMenuItem(menuId, body);
 
@@ -185,20 +320,23 @@ app.patch(
     params: updateMenuItemParamsSchema,
     body: updateMenuItemBodySchema,
     detail: {
-      tags: ["menu"],
-      summary: "Update a menu item",
+      tags: ["admin"],
+      summary: "Update a menu item (admin only)",
       description: "Update fields of an existing menu item.",
     },
     response: {
       200: menuItemResponseSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
       404: apiErrorResponseSchema,
     },
   },
 );
 
 app.delete(
-  "/api/menu/:id",
-  async ({ params, set }) => {
+  "/api/admin/menu/:id",
+  async ({ request, params, set }) => {
+    await requireAdmin(request);
     const menuId = parseInt(params.id);
     const removedMenuItem = await store.deleteMenuItem(menuId);
 
@@ -212,12 +350,14 @@ app.delete(
   {
     params: deleteMenuItemParamsSchema,
     detail: {
-      tags: ["menu"],
-      summary: "Delete a menu item",
+      tags: ["admin"],
+      summary: "Delete a menu item (admin only)",
       description: "Remove a menu item by id.",
     },
     response: {
       200: menuItemResponseSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
       404: apiErrorResponseSchema,
     },
   },
@@ -459,6 +599,149 @@ app.post(
       404: apiErrorResponseSchema,
       409: apiErrorResponseSchema,
       500: apiErrorResponseSchema,
+    },
+  },
+);
+
+// ─── Admin Orders Routes ──────────────────────────────────────────────────────
+
+// GET /api/admin/orders - 查詢所有訂單（管理員專用）
+app.get(
+  "/api/admin/orders",
+  async ({ request, query }) => {
+    await requireAdmin(request);
+    const validated = adminOrdersQuerySchema.parse(query);
+    const { orders, total } = store.getOrdersPaginated({
+      status: validated.status,
+      userId: validated.userId,
+      page: validated.page,
+      pageSize: validated.pageSize,
+    });
+    return {
+      data: orders.map(toOrderResponse),
+      meta: {
+        page: validated.page,
+        pageSize: validated.pageSize,
+        total,
+      },
+    };
+  },
+  {
+    query: adminOrdersQuerySchema,
+    detail: {
+      tags: ["admin"],
+      summary: "List all orders (admin only)",
+      description: "Return paginated list of all orders, optionally filtered by status or user.",
+    },
+    response: {
+      200: adminOrdersListResponseSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
+    },
+  },
+);
+
+// GET /api/admin/orders/:id - 查看單一訂單（管理員專用）
+app.get(
+  "/api/admin/orders/:id",
+  async ({ request, params, set }) => {
+    await requireAdmin(request);
+    const orderId = parseInt(params.id, 10);
+    const order = store.getOrderById(orderId);
+
+    if (!order) {
+      set.status = 404;
+      return { error: "Order not found" };
+    }
+
+    return { data: toOrderResponse(order) };
+  },
+  {
+    params: submitOrderParamsSchema,
+    detail: {
+      tags: ["admin"],
+      summary: "Get order by ID (admin only)",
+      description: "Return a specific order.",
+    },
+    response: {
+      200: orderResponseEnvelopeSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
+      404: apiErrorResponseSchema,
+    },
+  },
+);
+
+// PATCH /api/admin/orders/:id/status - 更新訂單狀態（管理員專用）
+app.patch(
+  "/api/admin/orders/:id/status",
+  async ({ request, params, body, set }) => {
+    await requireAdmin(request);
+    const orderId = parseInt(params.id, 10);
+    const order = store.getOrderById(orderId);
+
+    if (!order) {
+      set.status = 404;
+      return { error: "Order not found" };
+    }
+
+    // 簡單更新狀態（實際應該用 store 提供的更新方法）
+    if (body.status === "submitted" && order.status === "pending") {
+      order.status = "submitted";
+      order.submittedAt = new Date().toISOString();
+    } else if (body.status === "pending" && order.status === "submitted") {
+      order.status = "pending";
+      order.submittedAt = undefined;
+    }
+
+    return { data: toOrderResponse(order) };
+  },
+  {
+    params: adminUpdateOrderStatusParamsSchema,
+    body: adminUpdateOrderStatusBodySchema,
+    detail: {
+      tags: ["admin"],
+      summary: "Update order status (admin only)",
+      description: "Update the status of an order.",
+    },
+    response: {
+      200: orderResponseEnvelopeSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
+      404: apiErrorResponseSchema,
+    },
+  },
+);
+
+// GET /api/admin/stats - 統計資訊（管理員專用）
+app.get(
+  "/api/admin/stats",
+  async ({ request }) => {
+    await requireAdmin(request);
+    const allOrders = store.getOrders();
+    const totalRevenue = allOrders.reduce((sum, order) => sum + order.total, 0);
+    const pendingOrders = allOrders.filter((o) => o.status === "pending").length;
+    const submittedOrders = allOrders.filter((o) => o.status === "submitted").length;
+
+    return {
+      data: {
+        totalOrders: allOrders.length,
+        totalRevenue,
+        pendingOrders,
+        submittedOrders,
+      },
+    };
+  },
+  {
+    detail: {
+      tags: ["admin"],
+      summary: "Get statistics (admin only)",
+      description: "Return order and revenue statistics.",
+    },
+    response: {
+      200: adminStatsResponseSchema,
+      401: apiErrorResponseSchema,
+      403: apiErrorResponseSchema,
     },
   },
 );

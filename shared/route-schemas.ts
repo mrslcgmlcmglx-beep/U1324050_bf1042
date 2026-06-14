@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Order } from "./contracts.ts";
-import { menuItemSchema, orderSchema } from "./contracts.ts";
+import { menuItemSchema, orderSchema, sessionUserSchema, userProfileSchema } from "./contracts.ts";
 import toTaipeiDateTime from "../util.ts";
 
 export type { Order };
@@ -106,4 +106,85 @@ export const nullableOrderResponseEnvelopeSchema = z.object({
 
 export const healthResponseSchema = z.object({
   status: z.string(),
+});
+
+// ─── Auth 相關 Schema（GET /api/auth/me, PATCH /api/users/me）──────────────
+
+export const getCurrentUserResponseSchema = z.object({
+  data: userProfileSchema.nullable(),
+});
+
+export const updateUserProfileBodySchema = z.object({
+  name: z.string().min(1).optional(),
+  avatar: z.string().url().optional(),
+});
+
+// ─── Menu 搜尋、分類、分頁 Schema──────────────────────────────────────────
+
+export const menuQuerySchema = z.object({
+  search: z.string().optional(),
+  category: z.string().optional(),
+  page: z.string().optional(),
+  pageSize: z.string().optional(),
+});
+
+export const menuCategoriesResponseSchema = z.object({
+  data: z.array(z.string()),
+});
+
+export const menuListPaginatedResponseSchema = z.object({
+  data: z.array(menuItemSchema),
+  meta: z.object({
+    page: z.number(),
+    pageSize: z.number(),
+    total: z.number(),
+  }),
+});
+
+export const getMenuByIdParamsSchema = z.object({
+  id: z.string().regex(/^[0-9]+$/),
+});
+
+// ─── 管理者 API Schema──────────────────────────────────────────────────────
+
+export const adminOrdersQuerySchema = z.object({
+  status: z.enum(["pending", "submitted"]).optional(),
+  userId: z.string().optional(),
+  page: z.preprocess((value) => Number(value), z.number().int().min(1).default(1)),
+  pageSize: z.preprocess((value) => Number(value), z.number().int().min(1).max(100).default(20)),
+});
+
+export const adminOrdersListResponseSchema = z.object({
+  data: z.array(orderResponseSchema),
+  meta: z.object({
+    page: z.number(),
+    pageSize: z.number(),
+    total: z.number(),
+  }),
+});
+
+export const adminUpdateOrderStatusParamsSchema = z.object({
+  id: z.string().regex(/^[0-9]+$/),
+});
+
+export const adminUpdateOrderStatusBodySchema = z.object({
+  status: z.enum(["pending", "submitted"]),
+});
+
+export const adminStatsResponseSchema = z.object({
+  data: z.object({
+    totalOrders: z.number(),
+    totalRevenue: z.number(),
+    pendingOrders: z.number(),
+    submittedOrders: z.number(),
+  }),
+});
+
+export const adminUsersListResponseSchema = z.object({
+  data: z.array(userProfileSchema),
+  meta: z.object({
+    page: z.number(),
+    pageSize: z.number(),
+    total: z.number(),
+  }),
 });

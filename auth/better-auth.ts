@@ -20,7 +20,9 @@ const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
 // trustedOrigins：CSRF 白名單。預設信任 baseURL。
 // API_ALLOWED_ORIGIN 設定時（如 Vite dev server http://localhost:5173）一併加入，
 // 讓跨 port 開發場景的 sign-out 不會被 CSRF 保護擋住。
-const extraOrigin = process.env.API_ALLOWED_ORIGIN;
+// 開發環境下預設自動信任 localhost:5173
+const isDev = process.env.NODE_ENV !== "production";
+const extraOrigin = process.env.API_ALLOWED_ORIGIN || (isDev ? "http://localhost:5173" : "");
 const trustedOrigins =
   extraOrigin && extraOrigin !== "*" ? [baseURL, extraOrigin] : [baseURL];
 
@@ -60,10 +62,10 @@ export const auth = betterAuth({
 // ─── Session helper ───────────────────────────────────────────────────────────
 // 從 Request headers 取出 session，轉換成 contracts.ts 定義的 SessionUser。
 // DB 層的 Better Auth user 欄位（emailVerified / image / createdAt 等）
-// 不對外暴露，只取 contracts.ts 中定義的三個欄位。
+// 不對外暴露，只取 contracts.ts 中定義的欄位。
 export async function getCurrentUser(
   request: Request,
-): Promise<SessionUser | null> {
+): Promise<{ id: string; email: string; name: string; role: string } | null> {
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) return null;
 
@@ -72,5 +74,6 @@ export async function getCurrentUser(
     id: session.user.id,
     email: session.user.email,
     name: session.user.name,
+    role: (session.user as any).role ?? "customer",
   };
 }

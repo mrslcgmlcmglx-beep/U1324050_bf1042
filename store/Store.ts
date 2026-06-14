@@ -16,6 +16,14 @@ export interface Store {
   init(): Promise<void>;
 
   getMenu(): ReadonlyArray<MenuItem>;
+  getMenuById(id: number): MenuItem | undefined;
+  getMenuCategories(): ReadonlyArray<string>;
+  getMenuPaginated(options: {
+    search?: string;
+    category?: string;
+    page: number;
+    pageSize: number;
+  }): { items: MenuItem[]; total: number };
   createMenuItem(input: {
     name: string;
     price: number;
@@ -36,6 +44,12 @@ export interface Store {
   deleteMenuItem(menuId: number): Promise<MenuItem | null>;
 
   getOrders(): ReadonlyArray<Order>;
+  getOrdersPaginated(options: {
+    status?: "pending" | "submitted";
+    userId?: string;
+    page: number;
+    pageSize: number;
+  }): { orders: Order[]; total: number };
   getCurrentOrderByUserId(userId: string): Order | undefined;
   getOrderHistoryByUserId(userId: string): ReadonlyArray<Order>;
   getOrderById(orderId: number): Order | undefined;

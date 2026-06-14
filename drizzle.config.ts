@@ -1,5 +1,9 @@
 import { defineConfig } from "drizzle-kit";
 
+import * as dotenv from "dotenv";
+
+dotenv.config();
+
 const migrationUrl =
   process.env.DATABASE_URL_MIGRATION ?? process.env.DATABASE_URL;
 
@@ -16,4 +20,5 @@ export default defineConfig({
   dbCredentials: {
     url: migrationUrl,
   },
+  schemaFilter: ["bf_v9"],
 });

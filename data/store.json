@@ -313,9 +313,30 @@
       "status": "pending",
       "createdAt": "2026-04-03T22:43:05.970Z",
       "userId": "0001"
+    },
+    {
+      "id": 6,
+      "userId": "NWaBvqlO29pUZk69CSqC4I3nPuOFUJU6",
+      "items": [
+        {
+          "item": {
+            "id": 7,
+            "name": "紅茶",
+            "price": 25,
+            "category": "飲料",
+            "description": "古早味紅茶，微糖微冰為店內推薦比例，適合作為早餐基本配備。",
+            "image_url": "/imgs/menu/black-tea.webp"
+          },
+          "qty": 1
+        }
+      ],
+      "total": 25,
+      "status": "submitted",
+      "createdAt": "2026-06-11T07:01:20.737Z",
+      "submittedAt": "2026-06-11T07:01:25.697Z"
     }
   ],
   "userIdCounter": 2,
   "menuIdCounter": 12,
-  "orderIdCounter": 5
+  "orderIdCounter": 6
 }
